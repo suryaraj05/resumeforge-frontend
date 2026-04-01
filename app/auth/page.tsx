@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -15,7 +15,7 @@ import { useAuth } from "@/context/AuthContext";
 import { Button, Input, Divider } from "@/components/ui";
 import { useToast } from "@/components/ui";
 
-export default function AuthPage() {
+function AuthPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, loading } = useAuth();
@@ -193,5 +193,13 @@ export default function AuthPage() {
         By continuing, you agree to ResumeForge&apos;s terms of service and privacy policy.
       </p>
     </div>
+  );
+}
+
+export default function AuthPage() {
+  return (
+    <Suspense fallback={null}>
+      <AuthPageContent />
+    </Suspense>
   );
 }

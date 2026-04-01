@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Avatar, Badge } from "@/components/ui";
 
-const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+const apiBase = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000")
+  .trim()
+  .replace(/\/$/, "");
 
 export type PublicProfilePayload = {
   username: string;

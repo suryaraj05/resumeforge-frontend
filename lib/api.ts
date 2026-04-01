@@ -1,8 +1,11 @@
 import axios from "axios";
 import { getFirebaseAuth } from "./firebase";
 
+const rawApiUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
+const apiBase = (rawApiUrl || "http://localhost:4000").replace(/\/$/, "");
+
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000",
+  baseURL: apiBase,
   headers: {
     "Content-Type": "application/json",
   },

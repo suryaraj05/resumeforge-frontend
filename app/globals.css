@@ -1,27 +1,78 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Lora:ital,wght@0,400;0,500;0,600;1,400;1,500&family=JetBrains+Mono:wght@400;500&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@layer base {
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  html {
+    font-family: 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    background-color: #FAFAF7;
+    color: #1A1A18;
+    line-height: 1.6;
+  }
+
+  ::selection {
+    background-color: #EEF3EE;
+    color: #1A1A18;
+  }
+
+  /* Remove default button/input styles */
+  button {
+    cursor: pointer;
+  }
+
+  input, textarea {
+    outline: none;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #E2DFD8;
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #C8C5BC;
   }
 }
 
-body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
-}
+@layer components {
+  /* Grid paper texture utility */
+  .bg-grid-paper {
+    background-image:
+      linear-gradient(rgba(107, 143, 113, 0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(107, 143, 113, 0.04) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
 
-@layer utilities {
-  .text-balance {
-    text-wrap: balance;
+  /* Paper panel base */
+  .paper-panel {
+    background-color: #FAFAF7;
+    border: 1px solid #E2DFD8;
+    border-radius: 6px;
+  }
+
+  /* Ink dot bullet */
+  .ink-dot::before {
+    content: '·';
+    color: #6B8F71;
+    font-weight: 600;
+    margin-right: 8px;
   }
 }

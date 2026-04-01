@@ -1,11 +1,5 @@
 {
   "framework": "nextjs",
   "installCommand": "npm install",
-  "buildCommand": "npm run build",
-  "rewrites": [
-    {
-      "source": "/api/:path*",
-      "destination": "https://resumeforge-backend-production-0a4e.up.railway.app/api/:path*"
-    }
-  ]
+  "buildCommand": "npm run build"
 }

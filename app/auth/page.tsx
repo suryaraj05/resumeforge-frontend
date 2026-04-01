@@ -4,8 +4,8 @@ import React, { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
-  auth,
-  googleProvider,
+  getFirebaseAuth,
+  getGoogleProvider,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signInWithPopup,
@@ -51,6 +51,7 @@ export default function AuthPage() {
 
     setSubmitting(true);
     try {
+      const auth = getFirebaseAuth();
       let userCredential;
       if (mode === "signup") {
         userCredential = await createUserWithEmailAndPassword(auth, email, password);
@@ -83,7 +84,7 @@ export default function AuthPage() {
   async function handleGoogleAuth() {
     setSubmitting(true);
     try {
-      const result = await signInWithPopup(auth, googleProvider);
+      const result = await signInWithPopup(getFirebaseAuth(), getGoogleProvider());
       const user = result.user;
 
       const res = await api.post("/api/auth/onboard", {

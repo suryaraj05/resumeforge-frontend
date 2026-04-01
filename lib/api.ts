@@ -1,5 +1,5 @@
 import axios from "axios";
-import { auth } from "./firebase";
+import { getFirebaseAuth } from "./firebase";
 
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000",
@@ -9,10 +9,15 @@ const api = axios.create({
 });
 
 api.interceptors.request.use(async (config) => {
-  const user = auth.currentUser;
-  if (user) {
-    const token = await user.getIdToken();
-    config.headers.Authorization = `Bearer ${token}`;
+  if (typeof window === "undefined") return config;
+  try {
+    const user = getFirebaseAuth().currentUser;
+    if (user) {
+      const token = await user.getIdToken();
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+  } catch {
+    /* Firebase not configured or not initialized yet */
   }
   return config;
 });

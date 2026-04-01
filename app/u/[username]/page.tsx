@@ -2,9 +2,14 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Avatar, Badge } from "@/components/ui";
 
-const apiBase = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000")
-  .trim()
-  .replace(/\/$/, "");
+function serverApiBase(): string {
+  const u =
+    process.env.API_URL?.trim() ||
+    process.env.BACKEND_URL?.trim() ||
+    process.env.NEXT_PUBLIC_API_URL?.trim() ||
+    "http://localhost:4000";
+  return u.replace(/\/$/, "");
+}
 
 export type PublicProfilePayload = {
   username: string;
@@ -25,7 +30,7 @@ export type PublicProfilePayload = {
 
 async function fetchPublic(username: string): Promise<PublicProfilePayload | null> {
   const res = await fetch(
-    `${apiBase}/api/profile/public/${encodeURIComponent(username)}`,
+    `${serverApiBase()}/api/profile/public/${encodeURIComponent(username)}`,
     { next: { revalidate: 120 } }
   );
   if (!res.ok) return null;

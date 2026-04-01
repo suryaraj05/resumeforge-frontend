@@ -79,6 +79,10 @@ export default function ChatPage() {
     return () => document.removeEventListener("keydown", handler);
   }, [rightPanelOpen]);
 
+  const handleMarkRead = useCallback(() => {
+    refreshNotifications();
+  }, [refreshNotifications]);
+
   if (loading || !user) {
     return (
       <div className="min-h-screen bg-paper flex items-center justify-center">
@@ -103,10 +107,6 @@ export default function ChatPage() {
     if (txt.includes("group") || txt.includes("bulk")) return "Coordinating your group update…";
     return "Thinking about your profile…";
   })();
-
-  const handleMarkRead = useCallback(() => {
-    refreshNotifications();
-  }, [refreshNotifications]);
 
   function handleUploadSuccess(kb: KnowledgeBase) {
     refreshKB();

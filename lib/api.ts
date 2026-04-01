@@ -2,7 +2,8 @@ import axios from "axios";
 import { getFirebaseAuth } from "./firebase";
 
 const rawApiUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
-const apiBase = (rawApiUrl || "http://localhost:4000").replace(/\/$/, "");
+// Empty NEXT_PUBLIC_API_URL => same-origin /api (rewritten to backend in next.config). Set to http://localhost:4000 for direct local API without proxy.
+const apiBase = rawApiUrl ? rawApiUrl.replace(/\/$/, "") : "";
 
 const api = axios.create({
   baseURL: apiBase,

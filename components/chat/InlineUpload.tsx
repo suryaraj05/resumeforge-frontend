@@ -29,8 +29,11 @@ export function InlineUpload({ onSuccess }: InlineUploadProps) {
       });
       toast("Resume uploaded and parsed!", "success");
       onSuccess(res.data.kb);
-    } catch {
-      toast("Failed to parse resume. Please try a cleaner PDF.", "error");
+    } catch (err: unknown) {
+      const message =
+        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
+        "Failed to parse resume. Try JSON import in Settings, or a text-based PDF.";
+      toast(message, "error");
     } finally {
       setUploading(false);
     }

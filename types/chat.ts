@@ -1,5 +1,6 @@
 import type { RefinedResume, ATSScoreResult, JobFitResult, RefinedResumeReasoning } from "./resume";
 import type { PeerComparisonResult } from "./groups";
+import type { WeakSpotReport } from "./jobs";
 
 export type ChatRole = 'user' | 'bot';
 
@@ -18,6 +19,11 @@ export type ChatIntent =
   | 'job_fit'
   | 'roast_resume'
   | 'interview_prep'
+  | 'job_search'
+  | 'job_prepare'
+  | 'tracker_query'
+  | 'interview_train'
+  | 'weak_spots'
   | 'chitchat';
 
 export type ClientChatContinuation =
@@ -34,8 +40,15 @@ export type ClientChatContinuation =
     };
 
 export interface InterviewQuestion {
-  q: string;
+  /** Primary question text (chat flow). */
+  q?: string;
+  /** Alias from REST interview-prep API. */
+  question?: string;
   hint: string;
+  /** First-person suggested answer from KB / JD-aware prep. */
+  answer?: string;
+  /** e.g. Technical, Behavioral, Situational */
+  type?: string;
 }
 
 export interface ChatMessageData {
@@ -85,6 +98,26 @@ export interface ChatMessageData {
   };
   peerComparison?: PeerComparisonResult;
   publicProfileUrl?: string;
+  /** Server: generate_resume but JD too short — UI should explain paste JD */
+  awaitingJobDescription?: boolean;
+  jobCards?: {
+    jobId: string;
+    title: string;
+    company: string;
+    fitScore: number;
+    location: string;
+    whyThisRole: string;
+  }[];
+  applicationStats?: {
+    total: number;
+    applied: number;
+    interviews: number;
+    offers: number;
+    interviewRate: number;
+  };
+  weakSpotReport?: WeakSpotReport;
+  interviewSessionId?: string;
+  interviewSessionUrl?: string;
 }
 
 export interface ChatMessage {

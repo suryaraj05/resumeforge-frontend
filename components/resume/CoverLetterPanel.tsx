@@ -11,6 +11,7 @@ interface CoverLetterPanelProps {
 
 export function CoverLetterPanel({ text }: CoverLetterPanelProps) {
   const [open, setOpen] = useState(true);
+  const [pdfLoading, setPdfLoading] = useState(false);
   const toast = useToast();
 
   async function copyText() {
@@ -24,7 +25,12 @@ export function CoverLetterPanel({ text }: CoverLetterPanelProps) {
   }
 
   async function downloadPdf() {
-    if (!text) return;
+    if (!text || pdfLoading) return;
+    setPdfLoading(true);
+    toast(
+      "Rendering cover letter PDF — often a few seconds. Please wait for the spinner to finish.",
+      "info"
+    );
     try {
       const res = await api.post(
         "/api/resume/cover-letter/pdf",
@@ -37,9 +43,11 @@ export function CoverLetterPanel({ text }: CoverLetterPanelProps) {
       a.download = "cover-letter.pdf";
       a.click();
       URL.revokeObjectURL(url);
-      toast("Download started", "success");
+      toast("PDF saved — check your downloads folder.", "success");
     } catch {
-      toast("PDF download failed", "error");
+      toast("PDF download failed. Try again in a moment.", "error");
+    } finally {
+      setPdfLoading(false);
     }
   }
 
@@ -60,9 +68,24 @@ export function CoverLetterPanel({ text }: CoverLetterPanelProps) {
           <div className="max-h-40 overflow-y-auto text-xs text-ink-muted leading-relaxed whitespace-pre-wrap font-serif border border-border rounded p-2 bg-paper">
             {text}
           </div>
-          <div className="flex gap-2">
-            <Button variant="ghost" size="sm" onClick={copyText}>Copy text</Button>
-            <Button variant="primary" size="sm" onClick={downloadPdf}>Download PDF</Button>
+          <div className="flex flex-col gap-2">
+            <div className="flex gap-2">
+              <Button variant="ghost" size="sm" onClick={copyText} disabled={pdfLoading}>
+                Copy text
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                loading={pdfLoading}
+                onClick={downloadPdf}
+                aria-busy={pdfLoading}
+              >
+                Download PDF
+              </Button>
+            </div>
+            {pdfLoading ? (
+              <p className="text-[9px] text-ink-muted">Don&apos;t click again until this finishes.</p>
+            ) : null}
           </div>
         </div>
       )}

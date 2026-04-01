@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { RefinedResumeReasoning } from "@/types/resume";
+import { displayText } from "@/lib/resumeArrays";
 
 export function ReasoningCard({ reasoning }: { reasoning: RefinedResumeReasoning }) {
   const [open, setOpen] = useState(false);
@@ -27,8 +28,8 @@ export function ReasoningCard({ reasoning }: { reasoning: RefinedResumeReasoning
               <ul className="space-y-1.5">
                 {inc.map((e, i) => (
                   <li key={i} className="text-[10px]">
-                    <span className="font-medium text-ink">{e.item}</span>
-                    <span className="text-ink-muted"> — {e.reason}</span>
+                    <span className="font-medium text-ink">{displayText(e.item)}</span>
+                    <span className="text-ink-muted"> — {displayText(e.reason)}</span>
                   </li>
                 ))}
               </ul>
@@ -40,8 +41,8 @@ export function ReasoningCard({ reasoning }: { reasoning: RefinedResumeReasoning
               <ul className="space-y-1.5">
                 {exc.map((e, i) => (
                   <li key={i} className="text-[10px] text-ink-muted">
-                    <span className="font-medium text-ink">{e.item}</span>
-                    <span> — {e.reason}</span>
+                    <span className="font-medium text-ink">{displayText(e.item)}</span>
+                    <span> — {displayText(e.reason)}</span>
                   </li>
                 ))}
               </ul>

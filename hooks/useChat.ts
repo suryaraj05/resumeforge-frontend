@@ -17,6 +17,19 @@ function newId() {
     : Math.random().toString(36).slice(2);
 }
 
+function chatRequestErrorMessage(err: unknown): string {
+  const ax = err as { response?: { status?: number; data?: { error?: string } }; message?: string };
+  const msg = ax.response?.data?.error;
+  if (typeof msg === "string" && msg.trim()) return msg;
+  const st = ax.response?.status;
+  if (st === 429)
+    return "Too many AI requests right now (hourly limit). Wait a bit and try again, or check your Gemini quota.";
+  if (st === 401) return "Your session expired. Please sign in again.";
+  if (st === 503) return "Chat is temporarily unavailable (server configuration).";
+  if (st === 500) return "The server hit an error. If it keeps happening, check API logs and Gemini API status.";
+  return "Something went wrong. Please try again.";
+}
+
 function toStored(msg: ChatMessage): StoredChatMessage {
   return {
     id: msg.id,
@@ -41,7 +54,7 @@ export type ActiveSection =
   | 'personal' | 'education' | 'experience' | 'projects'
   | 'skills' | 'certifications' | 'achievements' | null;
 
-export type ActiveRightTab = 'kb' | 'resume' | 'group';
+export type ActiveRightTab = 'kb' | 'resume' | 'group' | 'interview';
 
 export interface ResumeSessionState {
   refined: RefinedResume | null;
@@ -58,6 +71,10 @@ interface UseChatReturn {
   setActiveRightTab: (tab: ActiveRightTab) => void;
   kbVersion: number;
   resumeSession: ResumeSessionState;
+  /** True while a long JD message is being processed (resume generation path). */
+  resumeGenerating: boolean;
+  /** Server asked for a full job description before generation can run. */
+  resumeAwaitingJd: boolean;
   setCoverLetter: (text: string) => void;
   sendMessage: (text: string) => Promise<void>;
   sendContinuation: (continuation: ClientChatContinuation, displayMessage: string) => Promise<void>;
@@ -95,6 +112,10 @@ export function useChat(): UseChatReturn {
   });
   const [contextGroupId, setContextGroupId] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<GroupNotification[]>([]);
+  const [resumeGenerating, setResumeGenerating] = useState(false);
+  const [resumeAwaitingJd, setResumeAwaitingJd] = useState(false);
+  const resumeAwaitingJdRef = useRef(false);
+  resumeAwaitingJdRef.current = resumeAwaitingJd;
 
   const messagesRef = useRef<ChatMessage[]>([]);
   messagesRef.current = messages;
@@ -167,7 +188,8 @@ export function useChat(): UseChatReturn {
       } else if (
         intent === 'generate_resume' ||
         intent === 'ats_check' ||
-        intent === 'cover_letter'
+        intent === 'cover_letter' ||
+        (data?.refinedResume != null && intent === 'chitchat')
       ) {
         setActiveRightTab('resume');
         setActiveSection(null);
@@ -179,6 +201,9 @@ export function useChat(): UseChatReturn {
       ) {
         setActiveRightTab('group');
         setActiveSection(null);
+      } else if (intent === 'interview_prep') {
+        setActiveRightTab('interview');
+        setActiveSection(null);
       } else if (intent !== 'ask_kb') {
         setActiveSection(null);
       }
@@ -189,12 +214,35 @@ export function useChat(): UseChatReturn {
         setContextGroupId(data.groupId);
       }
 
-      if (intent === 'generate_resume' && data?.refinedResume) {
-        setResumeSession({
-          refined: data.refinedResume,
-          ats: data.atsScore ?? null,
-          coverLetter: null,
-        });
+      if (intent === 'generate_resume') {
+        if (data?.awaitingJobDescription && !data?.refinedResume) {
+          setResumeAwaitingJd(true);
+        } else if (!data?.refinedResume) {
+          setResumeAwaitingJd(false);
+        }
+      }
+
+      if (data?.refinedResume) {
+        setResumeAwaitingJd(false);
+        if (intent === 'generate_resume') {
+          setResumeSession({
+            refined: data.refinedResume,
+            ats: data.atsScore ?? null,
+            coverLetter: null,
+          });
+        } else if (intent === 'cover_letter' && data.coverLetterText != null) {
+          setResumeSession((prev) => ({
+            refined: data.refinedResume!,
+            coverLetter: data.coverLetterText!,
+            ats: data.atsScore ?? prev.ats,
+          }));
+        } else {
+          setResumeSession((prev) => ({
+            refined: data.refinedResume!,
+            ats: data.atsScore != null ? data.atsScore! : prev.ats,
+            coverLetter: prev.coverLetter,
+          }));
+        }
       } else if (intent === 'ats_check' && data?.atsScore) {
         setResumeSession((prev) => ({
           ...prev,
@@ -239,6 +287,14 @@ export function useChat(): UseChatReturn {
       setMessages((prev) => [...prev, userMsg]);
       setIsTyping(true);
 
+      const t = text.trim();
+      const longEnoughForResume =
+        resumeAwaitingJdRef.current ? t.length >= 80 : t.length >= 100;
+      if (longEnoughForResume) {
+        setResumeGenerating(true);
+        setActiveRightTab("resume");
+      }
+
       const history = messagesRef.current.slice(-10).map(toStored);
 
       try {
@@ -253,16 +309,17 @@ export function useChat(): UseChatReturn {
 
         const { intent, reply, data } = res.data;
         applyBotResponse(intent, reply, data);
-      } catch {
+      } catch (err) {
         const errMsg: ChatMessage = {
           id: newId(),
           role: 'bot',
-          content: "Something went wrong. Please try again.",
+          content: chatRequestErrorMessage(err),
           timestamp: new Date(),
         };
         setMessages((prev) => [...prev, errMsg]);
       } finally {
         setIsTyping(false);
+        setResumeGenerating(false);
       }
     },
     [applyBotResponse]
@@ -278,6 +335,13 @@ export function useChat(): UseChatReturn {
       };
       setMessages((prev) => [...prev, userMsg]);
       setIsTyping(true);
+      const t = displayMessage.trim();
+      const longEnoughForResume =
+        resumeAwaitingJdRef.current ? t.length >= 80 : t.length >= 100;
+      if (longEnoughForResume) {
+        setResumeGenerating(true);
+        setActiveRightTab("resume");
+      }
       const history = messagesRef.current.slice(-10).map(toStored);
       try {
         const res = await api.post<{
@@ -291,16 +355,17 @@ export function useChat(): UseChatReturn {
         });
         const { intent, reply, data } = res.data;
         applyBotResponse(intent, reply, data);
-      } catch {
+      } catch (err) {
         const errMsg: ChatMessage = {
           id: newId(),
           role: 'bot',
-          content: "Something went wrong. Please try again.",
+          content: chatRequestErrorMessage(err),
           timestamp: new Date(),
         };
         setMessages((prev) => [...prev, errMsg]);
       } finally {
         setIsTyping(false);
+        setResumeGenerating(false);
       }
     },
     [applyBotResponse]
@@ -409,6 +474,8 @@ export function useChat(): UseChatReturn {
     setActiveRightTab,
     kbVersion,
     resumeSession,
+    resumeGenerating,
+    resumeAwaitingJd,
     setCoverLetter,
     sendMessage,
     sendContinuation,

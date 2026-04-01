@@ -13,15 +13,17 @@ import { TypingIndicator } from "@/components/chat/TypingIndicator";
 import { ChatInput, ChatInputHandle } from "@/components/chat/ChatInput";
 import { NotificationsBar } from "@/components/chat/NotificationsBar";
 import { GroupPanel } from "@/components/chat/GroupPanel";
+import { InterviewPrepPanel } from "@/components/chat/InterviewPrepPanel";
 import { useChat } from "@/hooks/useChat";
 import { KnowledgeBase } from "@/types/kb";
 
-type RightPanelTab = 'kb' | 'resume' | 'group';
+type RightPanelTab = 'kb' | 'resume' | 'group' | 'interview';
 
 const RIGHT_TABS: { id: RightPanelTab; label: string }[] = [
   { id: "kb", label: "Knowledge Base" },
   { id: "resume", label: "Resume Preview" },
   { id: "group", label: "Group" },
+  { id: "interview", label: "Interview Prep" },
 ];
 
 export default function ChatPage() {
@@ -38,6 +40,8 @@ export default function ChatPage() {
     setActiveRightTab,
     kbVersion,
     resumeSession,
+    resumeGenerating,
+    resumeAwaitingJd,
     setCoverLetter,
     sendMessage,
     sendContinuation,
@@ -97,6 +101,9 @@ export default function ChatPage() {
   const lastUserMsg = messages.filter((m) => m.role === "user").slice(-1)[0];
   const loadingHint = (() => {
     if (!isTyping) return undefined;
+    if (resumeGenerating) {
+      return "Generating your tailored resume (often 30–90s) — watch the Resume Preview tab…";
+    }
     const txt = lastUserMsg?.content?.toLowerCase() ?? "";
     if (txt.includes("resume") && (txt.includes("generat") || txt.includes("creat"))) return "Curating your resume for this role…";
     if (txt.includes("ats") || txt.includes("applicant tracking")) return "Checking ATS compatibility…";
@@ -136,6 +143,9 @@ export default function ChatPage() {
               <line x1="15" y1="3" x2="15" y2="21" />
             </svg>
           </button>
+          <Link href="/jobs" className="text-xs text-ink-muted hover:text-sage hidden sm:block font-medium" title="Jobs">
+            Jobs
+          </Link>
           <Link href="/activity" className="p-1.5 text-ink-muted hover:text-ink transition-colors hidden sm:block" title="Activity feed">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
@@ -240,10 +250,18 @@ export default function ChatPage() {
                 ats={resumeSession.ats}
                 coverLetter={resumeSession.coverLetter}
                 onCoverLetterGenerated={setCoverLetter}
+                generatingResume={resumeGenerating}
+                awaitingJobDescription={resumeAwaitingJd}
               />
             )}
             {activeRightTab === "group" && (
               <GroupPanel activeGroupId={contextGroupId} />
+            )}
+            {activeRightTab === "interview" && (
+              <InterviewPrepPanel
+                isActive={activeRightTab === "interview"}
+                onSwitchToResume={() => setActiveRightTab("resume")}
+              />
             )}
           </div>
         )}

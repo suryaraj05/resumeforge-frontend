@@ -7,6 +7,7 @@ import { useAuth } from "@/context/AuthContext";
 import { Button, Input, Spinner } from "@/components/ui";
 import { useToast } from "@/components/ui";
 import api from "@/lib/api";
+import { KBJsonImportPanel } from "@/components/kb/KBJsonImportPanel";
 
 interface UserSettings {
   username?: string;
@@ -213,6 +214,18 @@ export default function SettingsPage() {
           >
             {savingProfile ? "Saving…" : "Save settings"}
           </Button>
+        </section>
+
+        <section className="border border-border rounded-md p-5 space-y-3">
+          <h2 className="text-xs font-semibold text-ink uppercase tracking-wide">Knowledge base</h2>
+          <p className="text-xs text-ink-muted">
+            No PDF upload or API quota? Use an external LLM with the copyable prompt, then paste JSON here.
+          </p>
+          <KBJsonImportPanel
+            onSuccess={() => {
+              toast("Knowledge base updated from JSON.", "success");
+            }}
+          />
         </section>
 
         {/* Danger zone */}

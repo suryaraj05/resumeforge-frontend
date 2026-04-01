@@ -7,6 +7,7 @@ import api from "@/lib/api";
 import { Button, Spinner } from "@/components/ui";
 import { useToast } from "@/components/ui";
 import { KBPreview } from "@/components/kb/KBPreview";
+import { KBJsonImportPanel } from "@/components/kb/KBJsonImportPanel";
 import { KnowledgeBase } from "@/types/kb";
 
 type Step = "upload" | "confirm" | "done";
@@ -31,6 +32,51 @@ export default function OnboardingPage() {
 
   const fileRef = useRef<HTMLInputElement>(null);
 
+  const uploadFile = useCallback(
+    async (selectedFile: File) => {
+      if (selectedFile.type !== "application/pdf") {
+        toast("Only PDF files are accepted", "error");
+        return;
+      }
+      if (selectedFile.size > 5 * 1024 * 1024) {
+        toast("File is too large. Maximum size is 5 MB.", "error");
+        return;
+      }
+
+      setFile(selectedFile);
+      setUploading(true);
+
+      try {
+        const formData = new FormData();
+        formData.append("resume", selectedFile);
+        const res = await api.post<{ kb: KnowledgeBase }>("/api/resume/upload", formData, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+        setKB(res.data.kb);
+        setStep("confirm");
+      } catch (err: unknown) {
+        const message =
+          (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
+          "Failed to parse resume. Please try a cleaner PDF.";
+        toast(message, "error");
+        setFile(null);
+      } finally {
+        setUploading(false);
+      }
+    },
+    [toast]
+  );
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setDragging(false);
+      const dropped = e.dataTransfer.files[0];
+      if (dropped) void uploadFile(dropped);
+    },
+    [uploadFile]
+  );
+
   if (!user) {
     return (
       <div className="min-h-screen bg-paper flex items-center justify-center">
@@ -38,49 +84,6 @@ export default function OnboardingPage() {
       </div>
     );
   }
-
-  async function uploadFile(selectedFile: File) {
-    if (selectedFile.type !== "application/pdf") {
-      toast("Only PDF files are accepted", "error");
-      return;
-    }
-    if (selectedFile.size > 5 * 1024 * 1024) {
-      toast("File is too large. Maximum size is 5 MB.", "error");
-      return;
-    }
-
-    setFile(selectedFile);
-    setUploading(true);
-
-    try {
-      const formData = new FormData();
-      formData.append("resume", selectedFile);
-      const res = await api.post<{ kb: KnowledgeBase }>("/api/resume/upload", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-      setKB(res.data.kb);
-      setStep("confirm");
-    } catch (err: unknown) {
-      const message =
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
-        "Failed to parse resume. Please try a cleaner PDF.";
-      toast(message, "error");
-      setFile(null);
-    } finally {
-      setUploading(false);
-    }
-  }
-
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      setDragging(false);
-      const dropped = e.dataTransfer.files[0];
-      if (dropped) uploadFile(dropped);
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    []
-  );
 
   async function handleConfirm() {
     setSaving(true);
@@ -203,6 +206,16 @@ export default function OnboardingPage() {
               </>
             )}
           </div>
+
+          <KBJsonImportPanel
+            disabled={uploading}
+            onSuccess={(imported) => {
+              setKB(imported);
+              setFile(null);
+              setStep("confirm");
+              toast("Imported from JSON — review your details below.", "success");
+            }}
+          />
 
           <Button variant="ghost" className="w-full" onClick={handleSkip} disabled={uploading}>
             Skip — I&apos;ll add my resume later

@@ -1,9 +1,11 @@
 "use client";
 
-import React from "react";
+import React, { useCallback, useState } from "react";
 import { ChatMessage, ClientChatContinuation } from "@/types/chat";
 import { KnowledgeBase } from "@/types/kb";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/components/ui";
+import { ChatMarkdown } from "./ChatMarkdown";
 import { DiffCard } from "./DiffCard";
 import { InterviewPrepCard } from "./InterviewPrepCard";
 import { SuggestedChips } from "./SuggestedChips";
@@ -13,6 +15,7 @@ import { JobFitCard } from "./JobFitCard";
 import { GroupBulkMemberFlow } from "./GroupBulkMemberFlow";
 import { PeerComparisonCard } from "./PeerComparisonCard";
 import { PublicProfileShare } from "./PublicProfileShare";
+import { JobSearchCards } from "@/components/jobs/JobSearchCards";
 
 interface MessageBubbleProps {
   message: ChatMessage;
@@ -43,8 +46,21 @@ export function MessageBubble({
   onSendContinuation,
   onBulkKbApplied,
 }: MessageBubbleProps) {
+  const toast = useToast();
+  const [copied, setCopied] = useState(false);
   const isUser = message.role === "user";
   const isRoast = message.data?.isRoast;
+
+  const copyMessage = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(message.content);
+      setCopied(true);
+      toast("Copied to clipboard", "success");
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast("Could not copy", "error");
+    }
+  }, [message.content, toast]);
 
   if (isUser) {
     return (
@@ -69,9 +85,17 @@ export function MessageBubble({
       </div>
 
       <div className="flex-1 min-w-0 space-y-1">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <span className="text-xs font-semibold text-ink">ResumeForge</span>
           <span className="text-[10px] font-mono text-ink-faint">{formatTime(message.timestamp)}</span>
+          <button
+            type="button"
+            onClick={() => void copyMessage()}
+            className="text-[10px] font-medium text-sage hover:text-sage-dark border border-sage/30 rounded px-2 py-0.5 hover:bg-sage-light/60 transition-colors"
+            title="Copy message text"
+          >
+            {copied ? "Copied" : "Copy"}
+          </button>
           {message.intent && message.intent !== 'chitchat' && (
             <span className="text-[9px] font-mono text-ink-faint bg-border/40 px-1.5 py-px rounded-sm hidden sm:inline">
               {message.intent}
@@ -89,7 +113,7 @@ export function MessageBubble({
           {isRoast && (
             <p className="text-[10px] font-mono text-amber-600 uppercase tracking-wide mb-2">🔥 Resume Roast</p>
           )}
-          <p className="whitespace-pre-wrap">{message.content}</p>
+          <ChatMarkdown content={message.content} className="text-sm text-ink [&_a]:break-all" />
         </div>
 
         {/* Diff card (update_kb) */}
@@ -209,6 +233,10 @@ export function MessageBubble({
         {message.intent === "share_profile" && message.data?.publicProfileUrl && (
           <PublicProfileShare url={message.data.publicProfileUrl} />
         )}
+
+        {message.intent === "job_search" && message.data?.jobCards?.length ? (
+          <JobSearchCards cards={message.data.jobCards} />
+        ) : null}
 
         {/* Suggested chips — hide while KB diff is pending */}
         {message.data?.suggestions?.length ? (

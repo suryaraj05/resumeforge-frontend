@@ -136,3 +136,10 @@ export interface StoredChatMessage {
   intent?: ChatIntent;
   timestamp: string;
 }
+
+export interface ChatSessionSummary {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+}

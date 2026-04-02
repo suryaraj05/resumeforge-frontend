@@ -235,10 +235,10 @@ export default function SettingsPage() {
             <p className="text-xs text-ink-muted mt-0.5">These actions are irreversible.</p>
           </div>
 
-          <div className="flex items-start justify-between gap-4 py-2 border-b border-border/60">
+            <div className="flex items-start justify-between gap-4 py-2 border-b border-border/60">
             <div className="space-y-0.5">
-              <p className="text-sm font-medium text-ink">Clear chat history</p>
-              <p className="text-xs text-ink-muted">Removes all messages from your chat. Does not affect your KB.</p>
+              <p className="text-sm font-medium text-ink">Clear all chats</p>
+              <p className="text-xs text-ink-muted">Deletes every chat thread and message. Does not affect your KB.</p>
             </div>
             <Button
               variant="ghost"

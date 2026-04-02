@@ -6,7 +6,10 @@ import {
   ChatMessageData,
   ClientChatContinuation,
   StoredChatMessage,
+  ChatSessionSummary,
 } from "@/types/chat";
+
+const SESSION_STORAGE_KEY = "rf_active_chat_session";
 import type { GroupNotification } from "@/types/groups";
 import { RefinedResume, ATSScoreResult } from "@/types/resume";
 import api from "@/lib/api";
@@ -66,6 +69,11 @@ interface UseChatReturn {
   messages: ChatMessage[];
   isTyping: boolean;
   historyLoaded: boolean;
+  sessions: ChatSessionSummary[];
+  activeSessionId: string | null;
+  selectSession: (sessionId: string) => void;
+  startNewChat: () => Promise<void>;
+  deleteSession: (sessionId: string) => Promise<void>;
   activeSection: ActiveSection;
   activeRightTab: ActiveRightTab;
   setActiveRightTab: (tab: ActiveRightTab) => void;
@@ -100,6 +108,9 @@ const SECTION_TO_INTENT_MAP: Record<string, ActiveSection> = {
 
 export function useChat(): UseChatReturn {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [sessions, setSessions] = useState<ChatSessionSummary[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [sessionsReady, setSessionsReady] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [activeSection, setActiveSection] = useState<ActiveSection>(null);
@@ -119,6 +130,17 @@ export function useChat(): UseChatReturn {
 
   const messagesRef = useRef<ChatMessage[]>([]);
   messagesRef.current = messages;
+  const activeSessionIdRef = useRef<string | null>(null);
+  activeSessionIdRef.current = activeSessionId;
+
+  const refreshSessionList = useCallback(async () => {
+    try {
+      const res = await api.get<{ sessions: ChatSessionSummary[] }>("/api/chat/sessions");
+      setSessions(res.data.sessions ?? []);
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   useEffect(() => {
     api
@@ -139,14 +161,103 @@ export function useChat(): UseChatReturn {
   }, []);
 
   useEffect(() => {
-    api
-      .get<{ history: StoredChatMessage[] }>("/api/chat/history")
-      .then((res) => {
-        setMessages(res.data.history.map(fromStored));
-      })
-      .catch(() => {})
-      .finally(() => setHistoryLoaded(true));
+    let cancelled = false;
+    (async () => {
+      try {
+        const listRes = await api.get<{ sessions: ChatSessionSummary[] }>("/api/chat/sessions");
+        let list = listRes.data.sessions ?? [];
+        if (!list.length) {
+          const cre = await api.post<{ session: ChatSessionSummary }>("/api/chat/sessions", {});
+          list = [cre.data.session];
+        }
+        if (cancelled) return;
+        const saved =
+          typeof window !== "undefined" ? localStorage.getItem(SESSION_STORAGE_KEY) : null;
+        let pick = list[0]?.id ?? null;
+        if (saved && list.some((s) => s.id === saved)) pick = saved;
+        setSessions(list);
+        setActiveSessionId(pick);
+      } catch {
+        if (!cancelled) {
+          setSessions([]);
+          setActiveSessionId(null);
+        }
+      } finally {
+        if (!cancelled) setSessionsReady(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  useEffect(() => {
+    if (!activeSessionId || !sessionsReady) {
+      if (sessionsReady && !activeSessionId) setHistoryLoaded(true);
+      return;
+    }
+    if (typeof window !== "undefined") {
+      localStorage.setItem(SESSION_STORAGE_KEY, activeSessionId);
+    }
+    setHistoryLoaded(false);
+    setMessages([]);
+    let cancelled = false;
+    api
+      .get<{ history: StoredChatMessage[] }>(
+        `/api/chat/history?sessionId=${encodeURIComponent(activeSessionId)}`
+      )
+      .then((res) => {
+        if (!cancelled) setMessages(res.data.history.map(fromStored));
+      })
+      .catch(() => {
+        if (!cancelled) setMessages([]);
+      })
+      .finally(() => {
+        if (!cancelled) setHistoryLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSessionId, sessionsReady]);
+
+  const selectSession = useCallback((sessionId: string) => {
+    setActiveSessionId(sessionId);
+  }, []);
+
+  const startNewChat = useCallback(async () => {
+    try {
+      const res = await api.post<{ session: ChatSessionSummary }>("/api/chat/sessions", {});
+      const s = res.data.session;
+      setSessions((prev) => [s, ...prev.filter((x) => x.id !== s.id)]);
+      setActiveSessionId(s.id);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const deleteSession = useCallback(
+    async (sessionId: string) => {
+      try {
+        await api.delete(`/api/chat/sessions/${encodeURIComponent(sessionId)}`);
+      } catch {
+        return;
+      }
+      const listRes = await api.get<{ sessions: ChatSessionSummary[] }>("/api/chat/sessions");
+      let list = listRes.data.sessions ?? [];
+      if (!list.length) {
+        const cre = await api.post<{ session: ChatSessionSummary }>("/api/chat/sessions", {});
+        list = [cre.data.session];
+      }
+      setSessions(list);
+      if (sessionId === activeSessionIdRef.current) {
+        const nextId = list[0]?.id ?? null;
+        setActiveSessionId(nextId);
+      } else if (activeSessionIdRef.current && !list.some((s) => s.id === activeSessionIdRef.current)) {
+        setActiveSessionId(list[0]?.id ?? null);
+      }
+    },
+    []
+  );
 
   const refreshNotifications = useCallback(async () => {
     try {
@@ -296,6 +407,21 @@ export function useChat(): UseChatReturn {
       }
 
       const history = messagesRef.current.slice(-10).map(toStored);
+      const sid = activeSessionIdRef.current;
+      if (!sid) {
+        setIsTyping(false);
+        setResumeGenerating(false);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: newId(),
+            role: "bot",
+            content: "No active chat session. Refresh the page and try again.",
+            timestamp: new Date(),
+          },
+        ]);
+        return;
+      }
 
       try {
         const res = await api.post<{
@@ -305,10 +431,12 @@ export function useChat(): UseChatReturn {
         }>("/api/chat/message", {
           message: text,
           history,
+          sessionId: sid,
         });
 
         const { intent, reply, data } = res.data;
         applyBotResponse(intent, reply, data);
+        void refreshSessionList();
       } catch (err) {
         const errMsg: ChatMessage = {
           id: newId(),
@@ -322,7 +450,7 @@ export function useChat(): UseChatReturn {
         setResumeGenerating(false);
       }
     },
-    [applyBotResponse]
+    [applyBotResponse, refreshSessionList]
   );
 
   const sendContinuation = useCallback(
@@ -343,6 +471,21 @@ export function useChat(): UseChatReturn {
         setActiveRightTab("resume");
       }
       const history = messagesRef.current.slice(-10).map(toStored);
+      const sid = activeSessionIdRef.current;
+      if (!sid) {
+        setIsTyping(false);
+        setResumeGenerating(false);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: newId(),
+            role: "bot",
+            content: "No active chat session. Refresh the page and try again.",
+            timestamp: new Date(),
+          },
+        ]);
+        return;
+      }
       try {
         const res = await api.post<{
           intent: string;
@@ -352,9 +495,11 @@ export function useChat(): UseChatReturn {
           message: displayMessage,
           history,
           continuation,
+          sessionId: sid,
         });
         const { intent, reply, data } = res.data;
         applyBotResponse(intent, reply, data);
+        void refreshSessionList();
       } catch (err) {
         const errMsg: ChatMessage = {
           id: newId(),
@@ -368,7 +513,7 @@ export function useChat(): UseChatReturn {
         setResumeGenerating(false);
       }
     },
-    [applyBotResponse]
+    [applyBotResponse, refreshSessionList]
   );
 
   const inviteToGroup = useCallback(async (groupId: string, targetUserId: string) => {
@@ -469,6 +614,11 @@ export function useChat(): UseChatReturn {
     messages,
     isTyping,
     historyLoaded,
+    sessions,
+    activeSessionId,
+    selectSession,
+    startNewChat,
+    deleteSession,
     activeSection,
     activeRightTab,
     setActiveRightTab,

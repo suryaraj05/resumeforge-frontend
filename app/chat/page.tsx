@@ -17,6 +17,7 @@ import { InterviewPrepPanel } from "@/components/chat/InterviewPrepPanel";
 import { useChat } from "@/hooks/useChat";
 import { KnowledgeBase } from "@/types/kb";
 import { MyApplicationsPanel } from "@/components/jobs/MyApplicationsPanel";
+import { ChatSessionsSidebar } from "@/components/chat/ChatSessionsSidebar";
 import api from "@/lib/api";
 import type { MentionSuggestion } from "@/components/chat/ChatInput";
 import type { ApplicationDoc } from "@/types/jobs";
@@ -35,11 +36,17 @@ export default function ChatPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
+  const [sessionsDrawerOpen, setSessionsDrawerOpen] = useState(false);
 
   const {
     messages,
     isTyping,
     historyLoaded,
+    sessions,
+    activeSessionId,
+    selectSession,
+    startNewChat,
+    deleteSession,
     activeSection,
     activeRightTab,
     setActiveRightTab,
@@ -210,6 +217,17 @@ export default function ChatPage() {
       {/* Top bar */}
       <header className="h-12 border-b border-border px-5 flex items-center justify-between shrink-0 z-10 bg-paper sticky top-0">
         <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setSessionsDrawerOpen(true)}
+            className="md:hidden p-1.5 text-ink-muted hover:text-ink rounded border border-border"
+            aria-label="Open chats"
+            title="Chats"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            </svg>
+          </button>
           <Link href="/" className="text-sm font-semibold tracking-tight text-ink hover:opacity-80">
             Resume<span className="text-sage">Forge</span>
           </Link>
@@ -250,10 +268,58 @@ export default function ChatPage() {
         </div>
       </header>
 
-      {/* Main two-panel layout */}
-      <div className="flex-1 flex overflow-hidden">
+      {/* Main layout: sessions | chat | right panel */}
+      <div className="flex-1 flex overflow-hidden relative">
+        {/* Desktop session list */}
+        <ChatSessionsSidebar
+          sessions={sessions}
+          activeId={activeSessionId}
+          onSelect={selectSession}
+          onNewChat={startNewChat}
+          onDeleteSession={deleteSession}
+          className="hidden md:flex w-[min(13.5rem,36vw)] shrink-0 border-r"
+        />
 
-        {/* Left — Chat (60%) */}
+        {/* Mobile session drawer */}
+        {sessionsDrawerOpen ? (
+          <div
+            className="md:hidden fixed inset-0 z-30 bg-ink/25"
+            role="presentation"
+            onClick={() => setSessionsDrawerOpen(false)}
+          >
+            <div
+              className="h-full w-[min(18rem,85vw)] bg-paper border-r border-border shadow-lg flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-2 py-2 border-b border-border shrink-0">
+                <span className="text-xs font-semibold text-ink">Chats</span>
+                <button
+                  type="button"
+                  className="text-xs text-ink-muted px-2 py-1"
+                  onClick={() => setSessionsDrawerOpen(false)}
+                >
+                  Close
+                </button>
+              </div>
+              <ChatSessionsSidebar
+                sessions={sessions}
+                activeId={activeSessionId}
+                onSelect={(id) => {
+                  selectSession(id);
+                  setSessionsDrawerOpen(false);
+                }}
+                onNewChat={async () => {
+                  await startNewChat();
+                  setSessionsDrawerOpen(false);
+                }}
+                onDeleteSession={deleteSession}
+                className="flex-1 min-h-0 border-0 overflow-hidden"
+              />
+            </div>
+          </div>
+        ) : null}
+
+        {/* Chat column (60% on md+) */}
         <div className={`flex flex-col border-r border-border min-w-0 ${rightPanelOpen ? "w-full md:w-[60%]" : "w-full"} transition-all`}>
 
           <NotificationsBar
@@ -300,9 +366,9 @@ export default function ChatPage() {
               loadingHint={loadingHint}
               mentionSuggestions={mentionSuggestions}
             />
-            {messages.length > 0 && (
-              <ClearChatButton />
-            )}
+            {messages.length > 0 && activeSessionId ? (
+              <DeleteThreadButton sessionId={activeSessionId} onDeleted={deleteSession} />
+            ) : null}
           </div>
         </div>
 
@@ -357,30 +423,34 @@ export default function ChatPage() {
   );
 }
 
-function ClearChatButton() {
-  const [clearing, setClearing] = React.useState(false);
-  const [done, setDone] = React.useState(false);
+function DeleteThreadButton({
+  sessionId,
+  onDeleted,
+}: {
+  sessionId: string;
+  onDeleted: (id: string) => Promise<void>;
+}) {
+  const [busy, setBusy] = React.useState(false);
 
-  async function clear() {
-    if (!window.confirm("Clear all chat history?")) return;
-    setClearing(true);
+  async function removeThread() {
+    if (!window.confirm("Delete this chat thread?")) return;
+    setBusy(true);
     try {
-      await import("@/lib/api").then((m) => m.default.delete("/api/chat/history"));
-      setDone(true);
-      setTimeout(() => window.location.reload(), 500);
-    } catch { /* ignore */ }
-    finally { setClearing(false); }
+      await onDeleted(sessionId);
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
     <button
       type="button"
-      onClick={clear}
-      disabled={clearing}
-      title="Clear chat history"
+      onClick={() => void removeThread()}
+      disabled={busy}
+      title="Delete this chat"
       className="absolute top-2 right-16 text-[10px] text-ink-faint hover:text-ink-muted transition-colors font-mono"
     >
-      {done ? "cleared" : clearing ? "…" : "clear chat"}
+      {busy ? "…" : "delete chat"}
     </button>
   );
 }

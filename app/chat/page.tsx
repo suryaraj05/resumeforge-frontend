@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState, useCallback } from "react";
+import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
@@ -16,14 +16,19 @@ import { GroupPanel } from "@/components/chat/GroupPanel";
 import { InterviewPrepPanel } from "@/components/chat/InterviewPrepPanel";
 import { useChat } from "@/hooks/useChat";
 import { KnowledgeBase } from "@/types/kb";
+import { MyApplicationsPanel } from "@/components/jobs/MyApplicationsPanel";
+import api from "@/lib/api";
+import type { MentionSuggestion } from "@/components/chat/ChatInput";
+import type { ApplicationDoc } from "@/types/jobs";
 
-type RightPanelTab = 'kb' | 'resume' | 'group' | 'interview';
+type RightPanelTab = 'kb' | 'resume' | 'group' | 'interview' | 'applications';
 
 const RIGHT_TABS: { id: RightPanelTab; label: string }[] = [
   { id: "kb", label: "Knowledge Base" },
   { id: "resume", label: "Resume Preview" },
   { id: "group", label: "Group" },
   { id: "interview", label: "Interview Prep" },
+  { id: "applications", label: "My Applications" },
 ];
 
 export default function ChatPage() {
@@ -57,6 +62,86 @@ export default function ChatPage() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatInputRef = useRef<ChatInputHandle>(null);
+
+  const [applicationMentions, setApplicationMentions] = useState<MentionSuggestion[]>([]);
+  const [friendMentions, setFriendMentions] = useState<MentionSuggestion[]>([]);
+
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    api
+      .get<{ all: ApplicationDoc[] }>("/api/applications")
+      .then((res) => {
+        if (cancelled) return;
+        const mentions: MentionSuggestion[] = (res.data.all ?? [])
+          .filter((a) => a.status && a.status !== "saved")
+          .slice(0, 10)
+          .map((a) => {
+            const label = `${a.company} — ${a.jobTitle}`;
+            return {
+              id: `app:${a.applicationId}`,
+              label,
+              insert: `@${a.company} ${a.jobTitle}`.trim(),
+            };
+          });
+        setApplicationMentions(mentions);
+      })
+      .catch(() => {
+        if (!cancelled) setApplicationMentions([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    if (!contextGroupId) {
+      setFriendMentions([]);
+      return;
+    }
+    let cancelled = false;
+    api
+      .get<{ members: { userId: string; displayName: string }[] }>(`/api/groups/${contextGroupId}`)
+      .then((res) => {
+        if (cancelled) return;
+        const members = res.data.members ?? [];
+        const mentions: MentionSuggestion[] = members
+          .filter((m) => m.userId !== user.uid)
+          .slice(0, 8)
+          .map((m) => ({
+            id: `friend:${m.userId}`,
+            label: m.displayName || m.userId,
+            insert: `@${m.displayName || m.userId}`,
+          }));
+        setFriendMentions(mentions);
+      })
+      .catch(() => {
+        if (!cancelled) setFriendMentions([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user, contextGroupId]);
+
+  const projectMentions = useMemo(() => {
+    const refined = resumeSession.refined;
+    const projects = refined?.projects ?? [];
+    return projects
+      .map((p) => p.name?.trim())
+      .filter((n): n is string => Boolean(n))
+      .slice(0, 8)
+      .map((name) => ({
+        id: `proj:${name}`,
+        label: name,
+        insert: `@${name}`,
+      })) as MentionSuggestion[];
+  }, [resumeSession.refined]);
+
+  const mentionSuggestions = useMemo(() => {
+    const base: MentionSuggestion[] = [{ id: "resume", label: "resume", insert: "@resume" }];
+    return [...applicationMentions, ...projectMentions, ...friendMentions, ...base].slice(0, 18);
+  }, [applicationMentions, projectMentions, friendMentions]);
 
   // Auth guard
   useEffect(() => {
@@ -213,6 +298,7 @@ export default function ChatPage() {
               disabled={isTyping}
               hasMessages={messages.length > 0}
               loadingHint={loadingHint}
+              mentionSuggestions={mentionSuggestions}
             />
             {messages.length > 0 && (
               <ClearChatButton />
@@ -263,6 +349,7 @@ export default function ChatPage() {
                 onSwitchToResume={() => setActiveRightTab("resume")}
               />
             )}
+            {activeRightTab === "applications" && <MyApplicationsPanel />}
           </div>
         )}
       </div>

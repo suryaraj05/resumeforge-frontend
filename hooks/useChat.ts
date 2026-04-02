@@ -54,7 +54,7 @@ export type ActiveSection =
   | 'personal' | 'education' | 'experience' | 'projects'
   | 'skills' | 'certifications' | 'achievements' | null;
 
-export type ActiveRightTab = 'kb' | 'resume' | 'group' | 'interview';
+export type ActiveRightTab = 'kb' | 'resume' | 'group' | 'interview' | 'applications';
 
 export interface ResumeSessionState {
   refined: RefinedResume | null;

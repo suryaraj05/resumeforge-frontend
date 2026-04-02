@@ -28,16 +28,26 @@ interface ChatInputProps {
   disabled?: boolean;
   hasMessages: boolean;
   loadingHint?: string;
+  mentionSuggestions?: MentionSuggestion[];
 }
 
 export interface ChatInputHandle {
   focus: () => void;
 }
 
+export interface MentionSuggestion {
+  id: string;
+  label: string;
+  /** Full token to insert into the prompt, should include leading '@'. */
+  insert: string;
+}
+
 export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
-  function ChatInput({ onSend, disabled, hasMessages, loadingHint }, ref) {
+  function ChatInput({ onSend, disabled, hasMessages, loadingHint, mentionSuggestions }, ref) {
     const [text, setText] = useState("");
     const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+    const [mentionIndex, setMentionIndex] = useState(0);
 
     useImperativeHandle(ref, () => ({
       focus() {
@@ -64,15 +74,55 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
 
     const handleKeyDown = useCallback(
       (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+        const mentionTokenMatch = text.match(/(^|\s)@([a-zA-Z0-9_-]{0,30})$/);
+        const mentionQuery = mentionTokenMatch ? mentionTokenMatch[2].toLowerCase() : "";
+        const mentionOptions =
+          mentionSuggestions?.filter((s) => {
+            if (!mentionQuery) return true;
+            return s.label.toLowerCase().includes(mentionQuery);
+          }) ?? [];
+
+        const showMentions = Boolean(mentionTokenMatch) && mentionOptions.length > 0;
+        if (showMentions) {
+          if (e.key === "ArrowDown") {
+            e.preventDefault();
+            setMentionIndex((i) => Math.min(i + 1, mentionOptions.length - 1));
+            return;
+          }
+          if (e.key === "ArrowUp") {
+            e.preventDefault();
+            setMentionIndex((i) => Math.max(i - 1, 0));
+            return;
+          }
+          if ((e.key === "Enter" && !e.shiftKey) || e.key === "Tab") {
+            e.preventDefault();
+            const tokenStart = text.lastIndexOf("@");
+            const pick = mentionOptions[Math.min(mentionIndex, Math.max(0, mentionOptions.length - 1))];
+            if (pick && tokenStart !== -1) {
+              const next = text.slice(0, tokenStart) + pick.insert + " ";
+              setText(next);
+            }
+            return;
+          }
+        }
+
         if (e.key === "Enter" && !e.shiftKey) {
           e.preventDefault();
           handleSend();
         }
       },
-      [handleSend]
+      [handleSend, disabled, text, mentionIndex, mentionSuggestions]
     );
 
     const hint = loadingHint || nextHint();
+    const mentionTokenMatch = text.match(/(^|\s)@([a-zA-Z0-9_-]{0,30})$/);
+    const mentionQuery = mentionTokenMatch ? mentionTokenMatch[2].toLowerCase() : "";
+    const mentionOptions =
+      mentionSuggestions?.filter((s) => {
+        if (!mentionQuery) return true;
+        return s.label.toLowerCase().includes(mentionQuery);
+      }) ?? [];
+    const showMentions = Boolean(mentionTokenMatch) && mentionOptions.length > 0;
 
     return (
       <div className="border-t border-border p-4 shrink-0 bg-paper">
@@ -96,7 +146,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
           {/* Text area */}
           <div
             className={cn(
-              "flex-1 flex items-end border rounded px-3 py-2 bg-paper transition-colors",
+              "flex-1 flex items-end border rounded px-3 py-2 bg-paper transition-colors relative",
               disabled ? "border-border opacity-60" : "border-border focus-within:border-sage"
             )}
           >
@@ -111,6 +161,31 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
               className="flex-1 bg-transparent outline-none resize-none text-sm text-ink placeholder:text-ink-faint leading-6 max-h-[120px] overflow-y-auto"
               style={{ height: "24px" }}
             />
+
+            {showMentions ? (
+              <div className="absolute left-0 right-0 bottom-[calc(100%+10px)] z-10">
+                <div className="bg-paper border border-border rounded-md shadow-lg overflow-hidden">
+                  {mentionOptions.slice(0, 8).map((opt, idx) => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        const tokenStart = text.lastIndexOf("@");
+                        if (tokenStart === -1) return;
+                        setText(text.slice(0, tokenStart) + opt.insert + " ");
+                        textareaRef.current?.focus();
+                      }}
+                      className={`w-full text-left px-3 py-2 text-xs hover:bg-sage-light/20 ${
+                        idx === mentionIndex ? "bg-sage-light/20 text-sage" : "text-ink"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </div>
 
           {/* Send */}

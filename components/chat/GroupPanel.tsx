@@ -29,6 +29,10 @@ export function GroupPanel({ activeGroupId }: { activeGroupId: string | null }) 
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [localGroupId, setLocalGroupId] = useState<string | null>(null);
 
+  const [joinId, setJoinId] = useState("");
+  const [joining, setJoining] = useState(false);
+  const [joinError, setJoinError] = useState<string | null>(null);
+
   const selectedId =
     localGroupId ?? activeGroupId ?? groups[0]?.groupId ?? null;
 
@@ -78,6 +82,25 @@ export function GroupPanel({ activeGroupId }: { activeGroupId: string | null }) 
     };
   }, [selectedId]);
 
+  async function joinByGroupId() {
+    const gid = joinId.trim();
+    if (!gid) return;
+    setJoining(true);
+    setJoinError(null);
+    try {
+      await api.post(`/api/groups/${encodeURIComponent(gid)}/join`);
+      const res = await api.get<{ groups: GroupSummary[] }>("/api/groups");
+      setGroups(res.data.groups ?? []);
+      setLocalGroupId(gid);
+      setJoinId("");
+    } catch (e: any) {
+      const msg = e?.response?.data?.error || e?.message || "Could not join group. Check the Group ID.";
+      setJoinError(String(msg));
+    } finally {
+      setJoining(false);
+    }
+  }
+
   if (loadingList) {
     return (
       <div className="flex-1 flex items-center justify-center p-8">
@@ -118,6 +141,33 @@ export function GroupPanel({ activeGroupId }: { activeGroupId: string | null }) 
             </option>
           ))}
         </select>
+
+        <div className="mt-3 space-y-2">
+          <label className="text-[10px] font-mono text-ink-faint uppercase tracking-wide block">
+            Join by Group ID
+          </label>
+          <div className="flex gap-2">
+            <input
+              value={joinId}
+              onChange={(e) => setJoinId(e.target.value)}
+              placeholder="Paste groupId…"
+              className="flex-1 text-xs border border-border rounded px-2 py-1.5 bg-paper text-ink"
+            />
+            <button
+              type="button"
+              disabled={joining || !joinId.trim()}
+              onClick={() => void joinByGroupId()}
+              className="text-xs font-medium bg-sage text-white rounded px-2 py-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {joining ? "Joining…" : "Join"}
+            </button>
+          </div>
+          {joinError ? (
+            <p className="text-[10px] text-amber-900 bg-amber-50/90 border border-amber-200 rounded px-2 py-1">
+              {joinError}
+            </p>
+          ) : null}
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">

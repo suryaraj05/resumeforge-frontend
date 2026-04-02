@@ -1,5 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 
+/**
+ * Proxy all /api/* to the Railway backend.
+ * Uses the Node.js runtime (not Edge middleware) so Vercel allows long-running
+ * upstream calls (chat + Gemini, job search) via maxDuration.
+ */
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+/** Hobby: capped at 60s by Vercel; Pro can use 300. */
+export const maxDuration = 300;
+
 const LOCAL = "http://127.0.0.1:4000";
 
 function backendOrigin(): string {
@@ -33,8 +43,7 @@ function buildProxyHeaders(req: NextRequest): Headers {
   return h;
 }
 
-export async function middleware(req: NextRequest): Promise<NextResponse> {
-  const path = req.nextUrl.pathname;
+async function proxy(req: NextRequest): Promise<NextResponse> {
   const origin = backendOrigin();
   if (process.env.VERCEL && origin === LOCAL) {
     return NextResponse.json(
@@ -46,6 +55,7 @@ export async function middleware(req: NextRequest): Promise<NextResponse> {
     );
   }
 
+  const path = req.nextUrl.pathname;
   const target = new URL(path + req.nextUrl.search, origin);
 
   const init: RequestInit = {
@@ -71,12 +81,16 @@ export async function middleware(req: NextRequest): Promise<NextResponse> {
     });
   } catch {
     return NextResponse.json(
-      { error: "Backend unreachable from edge. Check API_URL and Railway." },
+      { error: "Backend unreachable from Vercel. Check API_URL and Railway." },
       { status: 502 }
     );
   }
 }
 
-export const config = {
-  matcher: ["/api/:path*"],
-};
+export const GET = proxy;
+export const HEAD = proxy;
+export const POST = proxy;
+export const PUT = proxy;
+export const PATCH = proxy;
+export const DELETE = proxy;
+export const OPTIONS = proxy;

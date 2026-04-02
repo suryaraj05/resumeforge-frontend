@@ -74,7 +74,7 @@ export default function ChatPage() {
       .then((res) => {
         if (cancelled) return;
         const mentions: MentionSuggestion[] = (res.data.all ?? [])
-          .filter((a) => a.status && a.status !== "saved")
+          .filter((a) => a.status)
           .slice(0, 10)
           .map((a) => {
             const label = `${a.company} — ${a.jobTitle}`;
@@ -208,7 +208,7 @@ export default function ChatPage() {
   return (
     <div className="h-screen bg-paper flex flex-col overflow-hidden">
       {/* Top bar */}
-      <header className="h-12 border-b border-border px-5 flex items-center justify-between shrink-0 z-10 bg-paper">
+      <header className="h-12 border-b border-border px-5 flex items-center justify-between shrink-0 z-10 bg-paper sticky top-0">
         <div className="flex items-center gap-3">
           <Link href="/" className="text-sm font-semibold tracking-tight text-ink hover:opacity-80">
             Resume<span className="text-sage">Forge</span>
@@ -231,7 +231,7 @@ export default function ChatPage() {
           <Link href="/jobs" className="text-xs text-ink-muted hover:text-sage hidden sm:block font-medium" title="Jobs">
             Jobs
           </Link>
-          <Link href="/activity" className="p-1.5 text-ink-muted hover:text-ink transition-colors hidden sm:block" title="Activity feed">
+          <Link href="/activity" className="p-1.5 text-ink-muted hover:text-ink transition-colors" title="Activity feed">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
             </svg>

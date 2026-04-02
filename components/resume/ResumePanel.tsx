@@ -129,6 +129,7 @@ export function ResumePanel({
   const [template, setTemplate] = useState<ResumeTemplateId>("minimal");
   const [generatingCl, setGeneratingCl] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [fullPreviewOpen, setFullPreviewOpen] = useState(false);
   const toast = useToast();
 
   useEffect(() => {
@@ -160,6 +161,19 @@ export function ResumePanel({
       toast("PDF generation failed. Try again in a moment.", "error");
     } finally {
       setPdfLoading(false);
+    }
+  }
+
+  async function saveToApplications() {
+    try {
+      toast("Saving resume/cover letter into My Applications…", "info");
+      await api.post("/api/applications/from-resume-session");
+      toast("Saved to My Applications", "success");
+    } catch (err) {
+      const msg =
+        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
+        "Could not save to My Applications";
+      toast(msg, "error");
     }
   }
 
@@ -256,6 +270,12 @@ export function ResumePanel({
             >
               PDF
             </Button>
+            <Button variant="ghost" size="sm" onClick={() => setFullPreviewOpen(true)} disabled={!resume || pdfLoading}>
+              Full preview
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => void saveToApplications()} disabled={!resume || pdfLoading}>
+              Save to Applications
+            </Button>
           </div>
           {pdfLoading ? (
             <p className="text-[9px] text-ink-muted text-right max-w-[220px] leading-snug">
@@ -302,6 +322,39 @@ export function ResumePanel({
       )}
 
       <CoverLetterPanel text={coverLetter} />
+
+      {fullPreviewOpen && resume ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-3"
+          onMouseDown={(e) => {
+            if (e.currentTarget === e.target) setFullPreviewOpen(false);
+          }}
+        >
+          <div className="w-full max-w-3xl max-h-[85vh] bg-paper border border-border rounded-lg overflow-hidden shadow-xl">
+            <div className="flex items-center justify-between px-4 py-2 border-b border-border shrink-0">
+              <h3 className="text-sm font-semibold text-ink">Full Resume Preview</h3>
+              <button
+                type="button"
+                onClick={() => setFullPreviewOpen(false)}
+                className="text-xs font-medium text-ink-faint hover:text-ink px-2 py-1 rounded hover:bg-sage-light/20"
+              >
+                Close
+              </button>
+            </div>
+            <div className="overflow-y-auto p-4 bg-paper">
+              <div className="border border-border rounded-md bg-white overflow-hidden">
+                <div className="p-4 bg-paper">
+                  {template === "minimal" && <MinimalTemplate resume={resume} />}
+                  {template === "modern" && <ModernTemplate resume={resume} />}
+                  {template === "academic" && <AcademicTemplate resume={resume} />}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

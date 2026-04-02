@@ -67,7 +67,7 @@ export default function ActivityPage() {
 
   return (
     <div className="min-h-screen bg-paper bg-grid-paper">
-      <header className="border-b border-border px-5 py-4 flex items-center justify-between bg-paper">
+      <header className="border-b border-border px-5 py-4 flex items-center justify-between bg-paper sticky top-0 z-10">
         <div className="flex items-center gap-3">
           <Link href="/chat" className="text-ink-muted hover:text-ink">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

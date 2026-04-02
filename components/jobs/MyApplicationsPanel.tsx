@@ -36,6 +36,21 @@ type InterviewAnswer = {
   improvements?: string[];
 };
 
+type StoredInterviewQuestion = {
+  type?: string;
+  question?: string;
+  q?: string;
+  hint: string;
+  answer: string;
+};
+
+type InterviewPrepSavedDoc = {
+  mode: "general" | "role";
+  jdFingerprint: string | null;
+  questions: StoredInterviewQuestion[];
+  updatedAt: string;
+};
+
 type InterviewSession = {
   sessionId: string;
   applicationId?: string | null;
@@ -52,7 +67,9 @@ type InterviewSession = {
   createdAt?: string;
 };
 
-const INCLUDED_STATUSES: ApplicationStatus[] = ["applied", "interview", "offer", "rejected"];
+// Include "saved" because chat-generated resume/cover-letter is stored as a saved application
+// until the user moves it forward from the tracker.
+const INCLUDED_STATUSES: ApplicationStatus[] = ["saved", "applied", "interview", "offer", "rejected"];
 
 export function MyApplicationsPanel() {
   const toast = useToast();
@@ -64,6 +81,11 @@ export function MyApplicationsPanel() {
     rejected: [],
   });
   const [sessions, setSessions] = useState<InterviewSession[]>([]);
+  const [interviewPrep, setInterviewPrep] = useState<{ general: InterviewPrepSavedDoc | null; role: InterviewPrepSavedDoc | null }>({
+    general: null,
+    role: null,
+  });
+  const [rolePrepMatchesByAppId, setRolePrepMatchesByAppId] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -81,6 +103,15 @@ export function MyApplicationsPanel() {
         const sessRes = await api.get<{ sessions: InterviewSession[] }>("/api/interview/sessions");
         if (cancelled) return;
         setSessions(sessRes.data.sessions ?? []);
+
+        const prepRes = await api.get<{ general: InterviewPrepSavedDoc | null; role: InterviewPrepSavedDoc | null }>(
+          "/api/chat/interview-prep"
+        );
+        if (cancelled) return;
+        setInterviewPrep({
+          general: prepRes.data.general ?? null,
+          role: prepRes.data.role ?? null,
+        });
       } catch {
         // Keep empty lists; panel will show nothing instead of crashing.
       } finally {
@@ -93,6 +124,39 @@ export function MyApplicationsPanel() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function run() {
+      if (!interviewPrep.role?.jdFingerprint) return;
+      const targetFp = interviewPrep.role.jdFingerprint;
+      const apps = INCLUDED_STATUSES.flatMap((s) => byStatus[s] ?? []);
+      const out: Record<string, boolean> = {};
+      // Compute fingerprint using the same logic as the backend (sha256 hex, slice 0..24).
+      async function jdFingerprint(jdText: string): Promise<string> {
+        const enc = new TextEncoder();
+        const data = enc.encode(jdText.trim());
+        const hashBuf = await crypto.subtle.digest("SHA-256", data);
+        const hashArr = Array.from(new Uint8Array(hashBuf));
+        const hex = hashArr.map((b) => b.toString(16).padStart(2, "0")).join("");
+        return hex.slice(0, 24);
+      }
+
+      for (const a of apps) {
+        try {
+          const fp = await jdFingerprint(a.jdText ?? "");
+          out[a.applicationId] = fp === targetFp;
+        } catch {
+          out[a.applicationId] = false;
+        }
+      }
+      if (!cancelled) setRolePrepMatchesByAppId(out);
+    }
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [byStatus, interviewPrep.role?.jdFingerprint]);
 
   const applications = useMemo(() => {
     const all = INCLUDED_STATUSES.flatMap((s) => byStatus[s] ?? []);
@@ -273,9 +337,52 @@ export function MyApplicationsPanel() {
                         })}
                       </div>
                     </div>
+                  ) : interviewPrep.role && rolePrepMatchesByAppId[a.applicationId] ? (
+                    <div className="space-y-2">
+                      <div className="border border-border rounded-md bg-white p-2 space-y-2 max-h-[280px] overflow-y-auto">
+                        {interviewPrep.role.questions.map((q, idx) => (
+                          <div key={idx} className="space-y-1 border-b border-border/60 pb-2 last:border-b-0">
+                            <p className="text-[10px] font-semibold text-ink uppercase tracking-wide">
+                              Q{idx + 1} {q.type ? `· ${q.type}` : ""}
+                            </p>
+                            <p className="text-xs text-ink-muted leading-relaxed">{(q.question ?? q.q ?? "").toString()}</p>
+                            {q.hint ? <p className="text-xs"><span className="font-semibold">Hint:</span> {q.hint}</p> : null}
+                            <p className="text-xs leading-relaxed">
+                              <span className="font-semibold">Your draft answer:</span>{" "}
+                              {q.answer?.trim() ? q.answer : <span className="text-ink-faint">Not answered yet</span>}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="flex gap-2 flex-wrap">
+                        <Link
+                          href={`/jobs/interview/new?company=${encodeURIComponent(a.company)}&role=${encodeURIComponent(a.jobTitle)}&applicationId=${encodeURIComponent(a.applicationId)}`}
+                          className="inline-flex text-xs font-medium bg-sage text-white rounded px-3 py-1.5 hover:opacity-90"
+                        >
+                          Start interview session
+                        </Link>
+                      </div>
+                    </div>
                   ) : (
                     <div className="space-y-2">
-                      <p className="text-xs text-ink-muted">No interview prep session started for this application yet.</p>
+                      <p className="text-xs text-ink-muted">No company interview session yet. Showing saved interview prep.</p>
+                      {interviewPrep.general ? (
+                        <div className="border border-border rounded-md bg-white p-2 space-y-2 max-h-[280px] overflow-y-auto">
+                          {interviewPrep.general.questions.map((q, idx) => (
+                            <div key={idx} className="space-y-1 border-b border-border/60 pb-2 last:border-b-0">
+                              <p className="text-[10px] font-semibold text-ink uppercase tracking-wide">
+                                Q{idx + 1} {q.type ? `· ${q.type}` : ""}
+                              </p>
+                              <p className="text-xs text-ink-muted leading-relaxed">{(q.question ?? q.q ?? "").toString()}</p>
+                              {q.hint ? <p className="text-xs"><span className="font-semibold">Hint:</span> {q.hint}</p> : null}
+                              <p className="text-xs leading-relaxed">
+                                <span className="font-semibold">Your draft answer:</span>{" "}
+                                {q.answer?.trim() ? q.answer : <span className="text-ink-faint">Not answered yet</span>}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
                       <Link
                         href={`/jobs/interview/new?company=${encodeURIComponent(a.company)}&role=${encodeURIComponent(a.jobTitle)}&applicationId=${encodeURIComponent(a.applicationId)}`}
                         className="inline-flex text-xs font-medium bg-sage text-white rounded px-3 py-1.5 hover:opacity-90"

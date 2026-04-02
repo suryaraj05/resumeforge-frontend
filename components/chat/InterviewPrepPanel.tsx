@@ -7,6 +7,7 @@ import { useToast } from "@/components/ui";
 import api from "@/lib/api";
 import { InterviewQuestion } from "@/types/chat";
 import { InterviewPrepCard, interviewQuestionTitle } from "./InterviewPrepCard";
+import { InterviewCoachPractice } from "./InterviewCoachPractice";
 
 const MIN_JD_LEN = 80;
 
@@ -189,9 +190,9 @@ export function InterviewPrepPanel({ isActive, onSwitchToResume }: InterviewPrep
         </p>
         <p className="text-xs mt-2">
           <Link href="/interview/coach" className="text-sage font-medium hover:underline" target="_blank" rel="noopener noreferrer">
-            Open Voice Coach (new tab)
+            Open full-page coach (new tab)
           </Link>
-          <span className="text-ink-muted"> — practice with speech in the browser.</span>
+          <span className="text-ink-muted"> — or use the embedded coach below each question set.</span>
         </p>
       </div>
 
@@ -251,7 +252,16 @@ export function InterviewPrepPanel({ isActive, onSwitchToResume }: InterviewPrep
           <p className="text-[10px] text-ink-faint">Saved {generalSavedAt}</p>
         ) : null}
         {generalQuestions?.length ? (
-          <InterviewPrepCard questions={generalQuestions} showHeader={false} />
+          <>
+            <InterviewPrepCard questions={generalQuestions} showHeader={false} />
+            <div className="mt-3 rounded-lg border border-sage/25 bg-sage-light/20 px-3 py-3">
+              <InterviewCoachPractice
+                questions={generalQuestions}
+                compact
+                label="General prep — voice coach"
+              />
+            </div>
+          </>
         ) : null}
       </div>
     </div>

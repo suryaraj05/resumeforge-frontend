@@ -67,12 +67,20 @@ export function MessageBubble({
     return (
       <div className="flex justify-end gap-2 animate-slideUp">
         <div className="max-w-[75%] space-y-1">
+          <div className="flex items-center justify-end gap-2 flex-wrap">
+            <span className="text-[10px] font-mono text-ink-faint">{formatTime(message.timestamp)}</span>
+            <button
+              type="button"
+              onClick={() => void copyMessage()}
+              className="text-[10px] font-medium text-sage hover:text-sage-dark border border-sage/30 rounded px-2 py-0.5 hover:bg-sage-light/60 transition-colors"
+              title="Copy message text"
+            >
+              {copied ? "Copied" : "Copy"}
+            </button>
+          </div>
           <div className="px-3 py-2.5 rounded-md bg-sage text-white text-sm leading-relaxed">
             <p className="whitespace-pre-wrap">{message.content}</p>
           </div>
-          <p className="text-[10px] font-mono text-ink-faint text-right">
-            {formatTime(message.timestamp)}
-          </p>
         </div>
       </div>
     );

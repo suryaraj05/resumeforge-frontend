@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui";
 import { useToast } from "@/components/ui";
 import api from "@/lib/api";
@@ -185,6 +186,12 @@ export function InterviewPrepPanel({ isActive, onSwitchToResume }: InterviewPrep
         <h3 className="text-xs font-semibold text-ink uppercase tracking-wide">Interview Prep</h3>
         <p className="text-xs text-ink-muted mt-1 leading-relaxed">
           Two questionnaires from your knowledge base: one aligned to a job description in your session, and one for any interview.
+        </p>
+        <p className="text-xs mt-2">
+          <Link href="/interview/coach" className="text-sage font-medium hover:underline" target="_blank" rel="noopener noreferrer">
+            Open Voice Coach (new tab)
+          </Link>
+          <span className="text-ink-muted"> — practice with speech in the browser.</span>
         </p>
       </div>
 

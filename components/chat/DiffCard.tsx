@@ -100,38 +100,6 @@ function computeDiff(current: unknown, patch: unknown): DiffRow[] {
   return [];
 }
 
-// ─── Diff row renderers ───────────────────────────────────────────────────────
-
-const typeConfig: Record<DiffType, { bg: string; prefix: string; textColor: string }> = {
-  added: { bg: 'bg-green-50 border-green-200', prefix: '+', textColor: 'text-green-700' },
-  removed: { bg: 'bg-red-50 border-red-200', prefix: '−', textColor: 'text-red-700' },
-  changed: { bg: 'bg-amber-50 border-amber-200', prefix: '~', textColor: 'text-amber-700' },
-  unchanged: { bg: 'bg-transparent border-transparent', prefix: ' ', textColor: 'text-ink-faint' },
-};
-
-function DiffRow({ row }: { row: DiffRow }) {
-  const cfg = typeConfig[row.type];
-  if (row.type === 'unchanged') return null; // Only show changes
-
-  return (
-    <div className={cn("flex items-start gap-2 px-3 py-2 border rounded text-xs font-mono", cfg.bg)}>
-      <span className={cn("shrink-0 font-bold w-3", cfg.textColor)}>{cfg.prefix}</span>
-      <span className={cn("font-semibold min-w-[80px] shrink-0", cfg.textColor)}>{row.label}</span>
-      <div className="flex-1 min-w-0">
-        {row.type === 'changed' && row.oldVal && (
-          <p className="line-through text-red-400 truncate">{row.oldVal}</p>
-        )}
-        {(row.type === 'added' || row.type === 'changed') && row.newVal && (
-          <p className={cfg.textColor + " truncate"}>{row.newVal}</p>
-        )}
-        {row.type === 'removed' && row.oldVal && (
-          <p className="line-through text-red-400 truncate">{row.oldVal}</p>
-        )}
-      </div>
-    </div>
-  );
-}
-
 // ─── DiffCard component ───────────────────────────────────────────────────────
 
 export function DiffCard({
@@ -178,14 +146,43 @@ export function DiffCard({
         </button>
       </div>
 
-      {/* Diff rows */}
-      {expanded && changes.length > 0 && (
-        <div className="p-2 space-y-1 bg-paper">
-          {changes.map((row, i) => (
-            <DiffRow key={i} row={row} />
-          ))}
-          {changes.length === 0 && (
-            <p className="text-ink-faint text-center py-2">No visible changes in diff view.</p>
+      {/* Comparison table + row cards for long values */}
+      {expanded && (
+        <div className="bg-paper border-t border-border">
+          <p className="text-[10px] text-ink-muted px-3 py-2 leading-relaxed border-b border-border/60">
+            Merged by id where possible: rows you don&apos;t change stay in your KB. Confirm applies the patch below.
+          </p>
+          {changes.length > 0 ? (
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-[10px]">
+                  <thead>
+                    <tr className="border-b border-border text-ink-faint font-mono uppercase bg-paper">
+                      <th className="px-2 py-1.5 font-medium w-[18%]">Field</th>
+                      <th className="px-2 py-1.5 font-medium w-[12%]">Change</th>
+                      <th className="px-2 py-1.5 font-medium w-[35%]">Before</th>
+                      <th className="px-2 py-1.5 font-medium w-[35%]">After</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {changes.map((row, i) => (
+                      <tr key={i} className="border-b border-border/70 align-top">
+                        <td className="px-2 py-1.5 font-medium text-ink">{row.label}</td>
+                        <td className="px-2 py-1.5 font-mono text-ink-muted capitalize">{row.type}</td>
+                        <td className="px-2 py-1.5 text-red-700/85 break-words max-w-[180px]">
+                          {row.oldVal ?? "—"}
+                        </td>
+                        <td className="px-2 py-1.5 text-sage-dark break-words max-w-[180px]">
+                          {row.newVal ?? "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : (
+            <p className="text-ink-faint text-center py-3 text-[10px]">No visible changes in diff view.</p>
           )}
         </div>
       )}

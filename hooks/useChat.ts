@@ -13,6 +13,7 @@ const SESSION_STORAGE_KEY = "rf_active_chat_session";
 import type { GroupNotification } from "@/types/groups";
 import { RefinedResume, ATSScoreResult } from "@/types/resume";
 import api from "@/lib/api";
+import { useToast } from "@/components/ui";
 
 function newId() {
   return typeof crypto !== "undefined"
@@ -44,12 +45,26 @@ function toStored(msg: ChatMessage): StoredChatMessage {
 }
 
 function fromStored(msg: StoredChatMessage): ChatMessage {
+  const d = msg.data;
+  const data =
+    msg.intent === 'update_kb' &&
+    d &&
+    (d.patch !== undefined || d.section)
+      ? {
+          section: d.section,
+          patch: d.patch,
+          patchSummary: d.patchSummary,
+          currentSection: d.currentSection,
+          diffStatus: 'pending' as const,
+        }
+      : undefined;
   return {
     id: msg.id,
     role: msg.role,
     content: msg.content,
     intent: msg.intent,
     timestamp: new Date(msg.timestamp),
+    data,
   };
 }
 
@@ -107,6 +122,7 @@ const SECTION_TO_INTENT_MAP: Record<string, ActiveSection> = {
 };
 
 export function useChat(): UseChatReturn {
+  const toast = useToast();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sessions, setSessions] = useState<ChatSessionSummary[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
@@ -596,11 +612,17 @@ export function useChat(): UseChatReturn {
           },
         };
         setMessages((prev) => [...prev, confirmMsg]);
-      } catch {
+      } catch (err) {
         updateMessageData(messageId, { diffStatus: 'error' });
+        const ax = err as { response?: { data?: { error?: string } } };
+        const msg =
+          typeof ax.response?.data?.error === 'string'
+            ? ax.response.data.error
+            : 'Could not apply KB update. Check section and try again.';
+        toast(msg, 'error');
       }
     },
-    [updateMessageData, refreshKB]
+    [updateMessageData, refreshKB, toast]
   );
 
   const cancelKBUpdate = useCallback(

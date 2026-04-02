@@ -16,6 +16,7 @@ import { GroupBulkMemberFlow } from "./GroupBulkMemberFlow";
 import { PeerComparisonCard } from "./PeerComparisonCard";
 import { PublicProfileShare } from "./PublicProfileShare";
 import { JobSearchCards } from "@/components/jobs/JobSearchCards";
+import { ResumeDiffCard } from "./ResumeDiffCard";
 
 interface MessageBubbleProps {
   message: ChatMessage;
@@ -144,6 +145,10 @@ export function MessageBubble({
         {/* Inline upload trigger */}
         {message.intent === 'upload_resume' && message.data?.showUpload && (
           <InlineUpload onSuccess={onUploadSuccess} />
+        )}
+
+        {message.intent === 'generate_resume' && message.data?.resumeDiff && message.data.resumeDiff.length > 0 && (
+          <ResumeDiffCard rows={message.data.resumeDiff} />
         )}
 
         {message.intent === 'generate_resume' && message.data?.reasoning && (

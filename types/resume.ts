@@ -54,6 +54,12 @@ export interface RefinedAchievement {
   date?: string;
 }
 
+export interface ResumeDiffRow {
+  area: string;
+  before: string;
+  after: string;
+}
+
 export interface RefinedResume {
   targetRole?: string;
   summary?: string;

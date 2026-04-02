@@ -1,4 +1,10 @@
-import type { RefinedResume, ATSScoreResult, JobFitResult, RefinedResumeReasoning } from "./resume";
+import type {
+  RefinedResume,
+  ATSScoreResult,
+  JobFitResult,
+  RefinedResumeReasoning,
+  ResumeDiffRow,
+} from "./resume";
 import type { PeerComparisonResult } from "./groups";
 import type { WeakSpotReport } from "./jobs";
 
@@ -63,6 +69,7 @@ export interface ChatMessageData {
   isRoast?: boolean;
   refinedResume?: RefinedResume;
   reasoning?: RefinedResumeReasoning;
+  resumeDiff?: ResumeDiffRow[];
   atsScore?: ATSScoreResult;
   jd?: string;
   coverLetterText?: string;
@@ -129,12 +136,21 @@ export interface ChatMessage {
   data?: ChatMessageData;
 }
 
+/** Persisted with chat history for update_kb replay after reload. */
+export interface StoredChatMessageData {
+  section?: string;
+  patch?: unknown;
+  patchSummary?: string;
+  currentSection?: unknown;
+}
+
 export interface StoredChatMessage {
   id: string;
   role: ChatRole;
   content: string;
   intent?: ChatIntent;
   timestamp: string;
+  data?: StoredChatMessageData;
 }
 
 export interface ChatSessionSummary {

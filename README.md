@@ -1,154 +1,285 @@
+<div align="center">
+
 # ResumeForge Web
 
-![Next.js](https://img.shields.io/badge/Next.js-14-black?style=flat&logo=next.js&logoColor=white)
-![React](https://img.shields.io/badge/React-18-61DAFB?style=flat&logo=react&logoColor=black)
-![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat&logo=typescript&logoColor=white)
-![Tailwind CSS](https://img.shields.io/badge/Tailwind-3.x-06B6D4?style=flat&logo=tailwindcss&logoColor=white)
+### Next.js client for AI chat, knowledge base, resumes, and interview practice
 
-> **What this is:** The **ResumeForge** client — a Next.js (App Router) SPA-style experience for AI chat, knowledge-base management, tailored resume preview, group collaboration, interview prep with optional **voice coach**, and applications tracking. It talks to the ResumeForge API with Firebase-authenticated requests.
+[![Next.js](https://img.shields.io/badge/Next.js-14-000000?logo=next.js&logoColor=white)](https://nextjs.org)
+[![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)](https://react.dev)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind-3-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
+[![Firebase](https://img.shields.io/badge/Firebase-Auth%20%28client%29-FFCA28?logo=firebase&logoColor=black)](https://firebase.google.com)
 
----
+> A **Next.js 14 (App Router)** front end: multi-session **agent-style chat**, tabbed **activity** tools, **resizable** three-column layout, **rich message cards** (diffs, resume changes, job cards), and a **Web Speech**-based **interview coach** — all calling the ResumeForge API with **Firebase ID tokens**.
 
-## Snapshot for recruiters
+[Problem & solution](#the-problem) • [Architecture](#architecture) • [State & data flow](#state--data-flow) • [Features ↔ code](#feature-to-implementation) • [Routes](#app-router-routes) • [Packages](#key-dependencies) • [Config & security](#configuration--security) • [Quick start](#quick-start)
 
-| Dimension | How we approached it |
-|-----------|----------------------|
-| **UX depth** | Three-pane chat layout (**sessions · conversation · activity**) with **persisted resizable panels** (`react-resizable-panels` + local layout storage). |
-| **Trust & clarity** | KB updates show **diff-style tables**; resume regeneration can surface **what changed** vs the prior session snapshot; errors surfaced via toasts. |
-| **Accessibility / motion** | Interview coach respects **`prefers-reduced-motion`** for decorative animation; voice modes degrade gracefully when STT is unsupported. |
-| **Shipping** | Static-friendly routes where possible; API proxy or direct backend URL via env for local vs production. |
+</div>
 
 ---
 
-## Client ↔ API topology
+## The problem
+
+Typical “AI resume” products either:
+
+- Chat in a **single** thread with no durable **session** model  
+- Show **wall-of-text** responses with no **before/after** for KB or resume changes  
+- Use a **fixed** layout that wastes space for sessions vs. tools  
+- Offload “interview practice” to a **separate** product with no link to the same **KB + JD** the user already has here  
+
+---
+
+## The solution
+
+This app provides:
+
+1. **Per-chat sessions** — list, create, delete, auto-title from first message (`ChatSessionsSidebar` + `/api/chat/sessions*`).  
+2. **Three-column workspace** — **react-resizable-panels** v4 (`Group` / `Panel` / `Separator`) with **persisted layout** via `useDefaultLayout` (localStorage, id `rf-chat-layout`).  
+3. **Trust surfaces** — `DiffCard` for KB patches; `ResumeDiffCard` when a new tailored resume differs from the previous session snapshot; toasts on API errors.  
+4. **Interview prep** — server-generated question sets in the right tab, plus embedded **`InterviewCoachPractice`** (TT / TV / VT / VV) and a full-page **`/interview/coach`**.  
+5. **Auth-aware API client** — Axios instance injects `Authorization: Bearer <ID token>` and redirects on **401** (`lib/api.ts`).
+
+---
+
+## Features (product)
+
+| Area | What the user gets |
+|------|-------------------|
+| **Chat** | Markdown assistant replies, intent chips, continuations for group/peer flows |
+| **KB** | Summary panel, import JSON (settings), diff + confirm for `update_kb` |
+| **Resume** | Live preview, ATS, cover letter hooks, **full preview** in `/chat/resume-full` (print-friendly) |
+| **Group** | Invites, bulk update flows driven from chat continuations |
+| **Interview** | General + role-specific questions; **voice coach** in-tab and standalone |
+| **Applications** | Tracker-style panel tied to API |
+| **Jobs** | Explorer / search integration where configured |
+
+---
+
+## Architecture
+
+### Browser layers
 
 ```mermaid
 flowchart TB
-  subgraph Browser
-    UI["Next.js pages / components"]
-    Hook["useChat + axios interceptor"]
-    FB["Firebase Auth (client SDK)"]
+  subgraph app["Next.js App Router"]
+    PAGES["app/*/page.tsx\n(client + server boundaries)"]
+    CTX["AuthContext · providers"]
   end
 
-  subgraph Config
-    Env["NEXT_PUBLIC_API_URL"]
+  subgraph chat_ui["Chat surface"]
+    PAGE["app/chat/page.tsx"]
+    SIDEBAR["ChatSessionsSidebar"]
+    BUBBLE["MessageBubble"]
+    INPUT["ChatInput"]
+    ACT["KBSummaryPanel · ResumePanel · …"]
   end
 
-  subgraph Backend["ResumeForge API"]
-    REST["Express /api/*"]
+  subgraph data["Client data"]
+    HOOK["hooks/useChat.ts"]
+    API["lib/api.ts\naxios + JWT"]
   end
 
-  FB -->|ID token| Hook
-  Env -.->|empty => same-origin /api| Hook
-  Env -.->|e.g. localhost:4000| Hook
-  Hook -->|Authorization: Bearer JWT| REST
-  UI --> Hook
+  subgraph remote["Backend"]
+    BE["ResumeForge API\nExpress /api/*"]
+  end
+
+  PAGES --> chat_ui
+  CTX --> HOOK
+  PAGE --> HOOK
+  HOOK --> API
+  API -->|"HTTPS"| BE
 ```
 
-> **Implementation note:** `lib/api.ts` attaches the Firebase **ID token** to each request. If `NEXT_PUBLIC_API_URL` is unset, requests use **same-origin** `baseURL` and Next rewrites can forward `/api` to the backend (see `next.config` in this app).
+### API base URL resolution
+
+`lib/api.ts`:
+
+- If **`NEXT_PUBLIC_API_URL`** is set → Axios `baseURL` is that origin (e.g. `https://api.example.com` or `http://localhost:4000`).  
+- If **unset** → `baseURL` is **empty** → requests are **same-origin** (browser calls `/api/...` on the Next host). **You must** configure your deployment (reverse proxy, separate API host, or rewrites) so those requests reach the Express API.
+
+> The repo’s `next.config.mjs` sets **COOP** headers (`same-origin-allow-popups`) for Firebase Auth popups — not API routing.
 
 ---
 
-## Information architecture (main chat experience)
+## State & data flow
+
+### `useChat` (conceptual)
 
 ```mermaid
-flowchart LR
-  subgraph Left
-    S["Chat sessions\n(new / select / delete)"]
-  end
+sequenceDiagram
+  participant UI as Chat page / MessageBubble
+  participant UC as useChat
+  participant API as lib/api
+  participant SRV as Express API
 
-  subgraph Center
-    C["Message stream\n(Markdown, diffs, cards)"]
-  end
+  UI->>UC: sendMessage(text)
+  UC->>API: POST /api/chat/message + sessionId
+  API->>SRV: processMessage
+  SRV-->>API: intent + reply + data
+  API-->>UC: response
+  UC->>UC: merge messages, handle intents
+  UC-->>UI: re-render
 
-  subgraph Right
-    T["Tabbed activity\nKB · Resume · Group · Interview · Apps"]
-  end
-
-  S --- C --- T
+  Note over UC,SRV: KB confirm calls POST /api/profile/kb/update
 ```
 
-- **Left:** Thread list — same mental model as “agent” products: one session per topic or workflow.
-- **Center:** Rich messages — `MessageBubble` composes roast cards, KB `DiffCard`, resume diff, job cards, etc.
-- **Right:** Contextual tools without leaving the page; **Resume** includes full preview opening a **dedicated print-friendly route** (`/chat/resume-full`).
+### Session lifecycle
+
+1. User picks or creates **session** → `activeSessionId` drives **history load** and **message append** on send.  
+2. Switching sessions loads **stored messages** from API so **DiffCard** metadata (`update_kb` `data`) is restored when persisted server-side.  
+3. **Right panel** tabs (`kb` \| `resume` \| `group` \| `interview` \| `applications`) are local UI state (`activeRightTab`) — not URL-routed in v1.
+
+### Resizable layout (desktop)
+
+- **Library:** `react-resizable-panels` v4 — components **`Group`**, **`Panel`**, **`Separator`**.  
+- **Persistence:** `useDefaultLayout({ id: "rf-chat-layout", panelIds: ["sessions","chat","activity"], storage: localStorage })` → `defaultLayout` + `onLayoutChanged` on **`Group`**.  
+- **Panel IDs:** stable strings so saved percentages map correctly.  
+- **Collapsible right activity:** `PanelImperativeHandle` (`collapse` / `expand`) from header toggle on **`md+`**; mobile uses drawer / overlay patterns.
 
 ---
 
-## Feature → implementation map
+## Feature ↔ implementation
 
-| User-visible capability | Primary surface |
-|-------------------------|-----------------|
-| Multi-session chat | `ChatSessionsSidebar`, session APIs, `useChat` |
-| KB update preview / confirm | `DiffCard`, `/api/profile/kb/update`, merged KB writes on server |
-| Resume generation & ATS hints | Chat intents + `ResumePanel`, session APIs |
-| Full-page resume preview | `/chat/resume-full`, templates under `components/resume/templates` |
-| Interview prep lists | `InterviewPrepPanel`, `/api/chat/interview-prep` |
-| Voice-capable coach | `InterviewCoachPractice` + `/interview/coach`, Web Speech API helpers in `lib/interviewCoachSpeech.ts` |
-| Copy user & assistant text | `MessageBubble` |
+| Feature | Primary files / routes |
+|---------|-------------------------|
+| Session list & CRUD | `components/chat/ChatSessionsSidebar.tsx`, `/api/chat/sessions` |
+| Message rendering | `components/chat/MessageBubble.tsx` — Markdown, `DiffCard`, `ResumeDiffCard`, `InterviewPrepCard`, chips |
+| KB diff / confirm | `components/chat/DiffCard.tsx`, `hooks/useChat.ts` → `confirmKBUpdate` → `POST /api/profile/kb/update` |
+| Resume panel | `components/resume/ResumePanel.tsx`, `/api/resume/session` |
+| Full-page preview | `app/chat/resume-full/page.tsx`, templates under `components/resume/templates/` |
+| Interview lists + embedded coach | `components/chat/InterviewPrepPanel.tsx`, `components/chat/InterviewCoachPractice.tsx` |
+| Standalone coach | `app/interview/coach/page.tsx` |
+| Speech helpers | `lib/interviewCoachSpeech.ts` |
+| Toast feedback | `react-hot-toast` via UI wrappers |
+
+### Interview coach (technical)
+
+- **TTS:** `speechSynthesis` + `SpeechSynthesisUtterance`; voice list from `getVoices()` + `voiceschanged`.  
+- **STT:** `SpeechRecognition` / `webkitSpeechRecognition` wrapped as **`SpeechRecognitionLike`** types (DOM typings vary).  
+- **Motion:** CSS pulse on an orb; gated by **`prefers-reduced-motion`**.  
+- **Modes:** `tt` \| `tv` \| `vt` \| `vv` — same component in tab (**compact**) and full page.
 
 ---
 
-## Tech stack (frontend)
+## App Router routes
 
-| Layer | Choice |
+| Route | Role |
+|-------|------|
+| `/` | Landing |
+| `/auth` | Firebase auth |
+| `/chat` | Main workspace |
+| `/chat/resume-full` | Print-friendly resume (`useSearchParams` for template — wrapped in **Suspense**) |
+| `/interview/coach` | Standalone coach |
+| `/profile`, `/settings`, `/activity`, `/jobs`, `/onboarding`, … | Feature pages |
+
+---
+
+## Key dependencies
+
+| Package | Role |
+|---------|------|
+| `next` | Framework, App Router, SSR/SSG hybrid |
+| `react` / `react-dom` | UI |
+| `axios` | HTTP + interceptors |
+| `firebase` | Client Auth |
+| `react-markdown` + `remark-gfm` | Assistant Markdown |
+| `react-resizable-panels` | Layout |
+| `react-hot-toast` | Notifications |
+
+---
+
+## Configuration & security
+
+| Topic | Detail |
 |-------|--------|
-| Framework | **Next.js 14** (App Router), **React 18** |
-| Styling | **Tailwind CSS** |
-| HTTP | **Axios** with auth interceptor |
-| Auth | **Firebase** client SDK → Bearer tokens |
-| Markdown in chat | **react-markdown** + **remark-gfm** |
-| Layout | **react-resizable-panels** v4 (`Group` / `Panel` / `Separator`, persisted layout) |
-| Feedback | **react-hot-toast** |
+| **Env** | `.env.local` — `NEXT_PUBLIC_*` only for non-secret browser values |
+| **Tokens** | Short-lived ID tokens attached per request; refresh handled by Firebase SDK |
+| **401** | Global interceptor redirects to `/auth` |
+| **COOP** | `next.config.mjs` headers for OAuth popups |
 
 ---
 
-## Scripts
+## Quick start
 
-| Command | Purpose |
-|---------|---------|
-| `npm run dev` | Next dev server (default port **3000**) |
-| `npm run build` | Production build |
-| `npm start` | Serve production build |
+### Prerequisites
+
+- Node.js **≥ 18**  
+- Firebase **web app** config (`NEXT_PUBLIC_*`)  
+- Running **ResumeForge API** (or deployed URL)
+
+### Commands
+
+```bash
+cd apps/web
+cp .env.local.example .env.local   # if present; else create per team docs
+npm install
+npm run dev
+```
+
+Open **`http://localhost:3000`**.
+
+Typical `.env.local`:
+
+```bash
+NEXT_PUBLIC_API_URL=http://localhost:4000
+# Plus NEXT_PUBLIC_FIREBASE_* from Firebase console
+```
+
+### Production
+
+```bash
+npm run build
+npm start
+```
+
+| Script | Purpose |
+|--------|---------|
+| `npm run dev` | Dev server |
+| `npm run build` | `next build` |
 | `npm run lint` | ESLint |
-| `npm run deploy` | Vercel deploy (if configured) |
+| `npm run deploy` | Vercel (if configured) |
 
 ---
 
-## Environment variables (typical)
-
-Configure `.env.local` (not committed). Examples:
-
-| Variable | Purpose |
-|----------|---------|
-| `NEXT_PUBLIC_API_URL` | Backend base URL; leave empty to use same-origin `/api` proxy pattern |
-| Firebase `NEXT_PUBLIC_*` | Client Firebase project config (see project setup) |
-
-Exact keys mirror your Firebase console and deployment environment.
-
----
-
-## Design rationale (concise)
-
-> **Why App Router?** File-based routes for `/chat`, `/interview/coach`, `/chat/resume-full`, etc., with colocated loading and client boundaries where hooks require `"use client"`.
-
-> **Why a dedicated coach component?** **InterviewCoachPractice** is reused in the **Interview Prep** tab and on the standalone coach page so behavior stays consistent (TT / TV / VT / VV modes, voice pickers, optional STT).
-
-> **Why resizable panels?** Power users adjust **sessions vs transcript vs tools** without a fixed split — layout preference is persisted so the UI “remembers” their workspace.
-
----
-
-## Project layout (abbreviated)
+## Folder structure
 
 ```text
 apps/web/
-├── app/                 # Routes (App Router)
-├── components/          # UI: chat, resume, kb, jobs, …
-├── hooks/               # useChat, etc.
-├── lib/                 # api client, utilities, speech helpers
-├── context/             # Auth and global providers
-└── types/               # Shared TS types (mirror API where needed)
+├── app/                      # Routes (App Router)
+│   ├── chat/
+│   │   ├── page.tsx          # Main 3-pane UI
+│   │   └── resume-full/
+│   │       └── page.tsx      # Full resume preview + Suspense
+│   ├── interview/coach/
+│   ├── layout.tsx
+│   └── …
+├── components/
+│   ├── chat/                 # Bubble, DiffCard, coach, sessions, …
+│   ├── resume/               # Panel, templates, ATS
+│   ├── kb/
+│   ├── jobs/
+│   └── ui/
+├── context/                  # AuthContext
+├── hooks/                    # useChat
+├── lib/                      # api.ts, utils, interviewCoachSpeech.ts
+├── types/                    # Shared TS types
+└── next.config.mjs
 ```
 
 ---
 
-*Pairs with `apps/api/README.md` for the Express + Gemini + Firebase backend.*
+## Why this front end is structured this way
+
+> **App Router:** File-system routing, lazy boundaries, and **Suspense** for hooks like `useSearchParams` that suspend during static generation.
+
+> **Fat `MessageBubble`:** Intent-specific cards stay **colocated** with chat rendering — avoids a giant switch in one template string and keeps **feature parity** with server `intent` enums.
+
+> **Embedded + page coach:** **DRY** practice UI — same `InterviewCoachPractice` in **Interview Prep** tab and **`/interview/coach`**.
+
+---
+
+<div align="center">
+
+Backend companion: [`../api/README.md`](../api/README.md)
+
+</div>
